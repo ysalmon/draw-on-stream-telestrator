@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import wmctrl
 import json
 import math
 import queue
@@ -23,6 +24,8 @@ DEFAULT = {
     "alpha": 80,
     "fill": None,
     "separate": False,
+    "following": None,
+    "ratio": None
 }
 
 
@@ -289,6 +292,11 @@ class Painter(tk.Frame):
             self.status_bar = self.commander.status_bar
             self.toplevel.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+            if self.following is not None :
+                self.root.overrideredirect(1)
+                self.root.attributes("-topmost", 1)
+                self.follow()
+
         else :
         # The canvas
             self.menu_bar = MenuBar(self.root)
@@ -326,6 +334,32 @@ class Painter(tk.Frame):
         self.root.bind("<Configure>", self.on_configure)
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+    def follow(self) :
+        if self.following is not None :
+            try :
+                w = self.wmctrl_get(self.following)[0]
+                width = w.w
+                height = w.h
+                deltax = w.x
+                deltay = w.y
+                if self.ratio is not None :
+                    (rw, rh) = self.ratio
+                    diff = width*rh - height*rw
+                    if diff < 0 :
+                        excess = height - (width*rh)//rw
+                        deltay += excess // 2
+                        height -= excess
+                    elif diff > 0 :
+                        excess = width - (height*rw)//rh
+                        deltax += excess // 2
+                        width -= excess
+                geom = "{}x{}+{}+{}".format(width, height, deltax, deltay)
+                if self.root.geometry() != geom :
+                    self.root.geometry(geom)
+                    self.on_configure(None)
+            except IndexError :
+                pass
+            self.root.after(500, self.follow)
 
     def on_configure(self, event):
         geometry = self.root.geometry()
@@ -346,6 +380,8 @@ class Painter(tk.Frame):
             "fill": self.fill_color,
             "geometry": self.root.geometry(),
             "separate" : bool(self.menu_bar.separate_status.get()),
+            "following" : self.configfollowing,
+            "ratio" : self.ratio,
         }
         print(config)
         json.dump(config, open("config.json", "w"), indent=2)
@@ -366,6 +402,19 @@ class Painter(tk.Frame):
         self.alpha = int(config.get("alpha", DEFAULT["alpha"]))
         self.fill_color = config.get("fill", DEFAULT["fill"])
         self.separate = config.get("separate", DEFAULT["separate"])
+        self.configfollowing = config.get("following", DEFAULT["following"])
+        if self.configfollowing.startswith("*") :
+            self.wmctrl_get = wmctrl.Window.by_name_endswith
+            self.following = self.configfollowing[1:]
+        elif self.configfollowing.endswith("*") :
+            self.wmctrl_get = wmctrl.Window.by_name_startswith
+            self.following = self.configfollowing[:-1]
+        else :
+            self.wmctrl_get = wmctrl.Window.by_name
+            self.following = self.configfollowing
+        self.ratio = config.get("ratio", DEFAULT["ratio"])
+        if isinstance(self.ratio, str) :
+            self.ratio = tuple(int(x) for x in self.ratio.split("x"))
 
     def setup(self):
         geometry = self.config.get("geometry", None)
