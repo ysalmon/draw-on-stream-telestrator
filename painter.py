@@ -403,15 +403,18 @@ class Painter(tk.Frame):
         self.fill_color = config.get("fill", DEFAULT["fill"])
         self.separate = config.get("separate", DEFAULT["separate"])
         self.configfollowing = config.get("following", DEFAULT["following"])
-        if self.configfollowing.startswith("*") :
-            self.wmctrl_get = wmctrl.Window.by_name_endswith
-            self.following = self.configfollowing[1:]
-        elif self.configfollowing.endswith("*") :
-            self.wmctrl_get = wmctrl.Window.by_name_startswith
-            self.following = self.configfollowing[:-1]
+        if isinstance(self.configfollowing, str) :
+            if self.configfollowing.startswith("*") :
+                self.wmctrl_get = wmctrl.Window.by_name_endswith
+                self.following = self.configfollowing[1:]
+            elif self.configfollowing.endswith("*") :
+                self.wmctrl_get = wmctrl.Window.by_name_startswith
+                self.following = self.configfollowing[:-1]
+            else :
+                self.wmctrl_get = wmctrl.Window.by_name
+                self.following = self.configfollowing
         else :
-            self.wmctrl_get = wmctrl.Window.by_name
-            self.following = self.configfollowing
+            self.following = None
         self.ratio = config.get("ratio", DEFAULT["ratio"])
         if isinstance(self.ratio, str) :
             self.ratio = tuple(int(x) for x in self.ratio.split("x"))
