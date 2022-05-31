@@ -346,7 +346,7 @@ class Painter(tk.Frame):
                 else :
                     self.root.deiconify()
                     followGeo = self.followingWnd.get_geometry()
-                    position = self.Display.screen().root.translate_coords(self.followingWnd.id, 0, 0)
+                    position = followGeo.root.translate_coords(self.followingWnd.id, 0, 0)
                     width = followGeo.width
                     height = followGeo.height
                     deltax = position.x
