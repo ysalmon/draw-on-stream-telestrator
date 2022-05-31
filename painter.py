@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import wmctrl
+import Xlib.display
 import json
 import math
 import queue
@@ -131,7 +132,7 @@ class MenuBar(tk.Frame):
         self.choose_size_button.set(DEFAULT["width"])
         self.choose_size_button.grid(row=0, column=7)
 
-        self.choose_alpha_button = tk.Scale(self, from_=1, to=100, orient=tk.HORIZONTAL, command=self.update_alpha)
+        self.choose_alpha_button = tk.Scale(self, from_=0, to=100, orient=tk.HORIZONTAL, command=self.update_alpha)
         self.choose_alpha_button.set(DEFAULT["alpha"])
         self.choose_alpha_button.grid(row=0, column=8)
 
@@ -271,6 +272,8 @@ class Painter(tk.Frame):
     def __init__(self, root=None):
         super().__init__(root)
         self.root = root
+        self.Display = Xlib.display.Display()
+        self.rootWnd = self.Display.create_resource_object("window",self.root.winfo_id())
         self.root.title(self.WIN_TITLE)
 
         # Some variables
@@ -291,11 +294,10 @@ class Painter(tk.Frame):
             self.menu_bar = self.commander.menu_bar
             self.status_bar = self.commander.status_bar
             self.toplevel.protocol("WM_DELETE_WINDOW", self.on_closing)
+            self.root.wm_attributes("-type", "utility")
+            self.root.wm_attributes("-topmost", 1)
 
-            if self.following is not None :
-                self.root.overrideredirect(1)
-                self.root.attributes("-topmost", 1)
-                self.follow()
+            self.follow()
 
         else :
         # The canvas
@@ -337,29 +339,38 @@ class Painter(tk.Frame):
     def follow(self) :
         if self.following is not None :
             try :
-                w = self.wmctrl_get(self.following)[0]
-                width = w.w
-                height = w.h
-                deltax = w.x
-                deltay = w.y
-                if self.ratio is not None :
-                    (rw, rh) = self.ratio
-                    diff = width*rh - height*rw
-                    if diff < 0 :
-                        excess = height - (width*rh)//rw
-                        deltay += excess // 2
-                        height -= excess
-                    elif diff > 0 :
-                        excess = width - (height*rw)//rh
-                        deltax += excess // 2
-                        width -= excess
-                geom = "{}x{}+{}+{}".format(width, height, deltax, deltay)
-                if self.root.geometry() != geom :
-                    self.root.geometry(geom)
-                    self.on_configure(None)
-            except IndexError :
-                pass
-            self.root.after(500, self.follow)
+                if self.followingWnd is None :
+                        self.followingWnd = self.Display.create_resource_object("window", int(self.wmctrl_get(self.following)[0].id, 16))
+                if self.followingWnd.get_attributes().map_state != 2 :
+                    self.root.withdraw()
+                else :
+                    self.root.deiconify()
+                    followGeo = self.followingWnd.get_geometry()
+                    position = self.Display.screen().root.translate_coords(self.followingWnd.id, 0, 0)
+                    width = followGeo.width
+                    height = followGeo.height
+                    deltax = position.x
+                    deltay = position.y
+                    if self.ratio is not None :
+                        (rw, rh) = self.ratio
+                        diff = width*rh - height*rw
+                        if diff < 0 :
+                            excess = height - (width*rh)//rw
+                            deltay += excess // 2
+                            height -= excess
+                        elif diff > 0 :
+                            excess = width - (height*rw)//rh
+                            deltax += excess // 2
+                            width -= excess
+                    geom = "{}x{}+{}+{}".format(width, height, deltax, deltay)
+                    if self.root.geometry() != geom :
+                        self.root.geometry(geom)
+                        self.on_configure(None)
+            except Exception as e :
+                self.followingWnd = None
+                print(e)
+            finally :
+                self.root.after(500, self.follow)
 
     def on_configure(self, event):
         geometry = self.root.geometry()
@@ -415,6 +426,7 @@ class Painter(tk.Frame):
                 self.following = self.configfollowing
         else :
             self.following = None
+        self.followingWnd = None
         self.ratio = config.get("ratio", DEFAULT["ratio"])
         if isinstance(self.ratio, str) :
             self.ratio = tuple(int(x) for x in self.ratio.split("x"))
@@ -441,6 +453,7 @@ class Painter(tk.Frame):
         self.c.bind("<Leave>", self.reset)
         self.root.bind("<Key>", self.key_up)
         self.root.after(100, self.check_queue)
+
 
     def check_queue(self):
         while not the_queue.empty():
